@@ -4,8 +4,30 @@
 
 **a. Initial design**
 
-- Briefly describe your initial UML design.
-- What classes did you include, and what responsibilities did you assign to each?
+Core actions (started with 1–3; added 4–5 since my first three were all input):
+
+1. Input owner info and constraints
+2. Add/edit tasks
+3. Add a pet
+4. Generate a daily plan
+5. Explain the plan
+
+Objects (started with Pet, Task, User):
+
+| Class | Attributes | Key methods |
+|-------|-----------|-------------|
+| `Owner` | `name`, `start_time`, `available_minutes`, `pets` | `add_pet()` |
+| `Pet` | `name`, `species`, `age_years`, `tasks` | `add_task()` |
+| `CareTask` | `title`, `duration_minutes`, `priority`, `start_time` | `weight()` |
+| `DailyPlan` | `pet`, `entries`, `skipped` | `build()`, `explain()`, `to_table()` |
+
+`DailyPlan.build()` does the scheduling: sort by `CareTask.weight()`, drop tasks that
+don't fit in `available_minutes`, assign start times in order. `explain()` says why each
+task was chosen or skipped.
+
+Considered and left out to keep it simple: a separate `Scheduler`, a `ScheduledTask`
+split from `CareTask`, `TimeWindow`, and `OwnerPreferences`. If any becomes necessary
+during implementation, that's a design change for 1b.
 
 **b. Design changes**
 

@@ -1,0 +1,38 @@
+classDiagram
+    class Owner {
+        +str name
+        +str start_time
+        +int available_minutes
+        +list~Pet~ pets
+        +add_pet(Pet pet) None
+    }
+
+    class Pet {
+        +str name
+        +str species
+        +int age_years
+        +list~CareTask~ tasks
+        +add_task(CareTask task) None
+    }
+
+    class CareTask {
+        +str title
+        +int duration_minutes
+        +str priority
+        +str start_time
+        +weight() float
+    }
+
+    class DailyPlan {
+        +Pet pet
+        +list~CareTask~ entries
+        +list~CareTask~ skipped
+        +build(Owner owner, Pet pet)$ DailyPlan
+        +explain() str
+        +to_table() list~dict~
+    }
+
+    Owner "1" --> "*" Pet : owns
+    Pet "1" --> "*" CareTask : has
+    DailyPlan "1" --> "1" Pet : plans for
+    DailyPlan "1" --> "*" CareTask : schedules
