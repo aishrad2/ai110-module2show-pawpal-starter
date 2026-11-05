@@ -1,10 +1,18 @@
 classDiagram
+    class TimeSlot {
+        +str label
+        +str start_time
+        +str end_time
+        +minutes() int
+    }
+
     class Owner {
         +str name
-        +str start_time
-        +int available_minutes
+        +list~TimeSlot~ available_timeslots
         +list~Pet~ pets
         +add_pet(Pet pet) None
+        +remove_pet(Pet pet) None
+        +total_available_minutes() int
     }
 
     class Pet {
@@ -20,19 +28,31 @@ classDiagram
         +int duration_minutes
         +str priority
         +str start_time
+        +is_pinned() bool
         +weight() float
     }
 
-    class DailyPlan {
+    class PlanEntry {
         +Pet pet
-        +list~CareTask~ entries
-        +list~CareTask~ skipped
-        +build(Owner owner, Pet pet)$ DailyPlan
+        +CareTask task
+        +str start_time
+        +str slot_label
+        +str reason
+    }
+
+    class DailyPlan {
+        +Owner owner
+        +list~PlanEntry~ entries
+        +list~PlanEntry~ skipped
+        +build(Owner owner)$ DailyPlan
         +explain() str
         +to_table() list~dict~
     }
 
     Owner "1" --> "*" Pet : owns
+    Owner "1" --> "*" TimeSlot : is free during
     Pet "1" --> "*" CareTask : has
-    DailyPlan "1" --> "1" Pet : plans for
-    DailyPlan "1" --> "*" CareTask : schedules
+    DailyPlan "1" --> "1" Owner : plans the day for
+    DailyPlan "1" --> "*" PlanEntry : contains
+    PlanEntry "1" --> "1" CareTask : schedules
+    PlanEntry "1" --> "1" Pet : is for

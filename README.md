@@ -72,14 +72,16 @@ Sample test output:
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
+> The method mapping below reflects the design in `diagrams/uml_draft.mmd`. The bodies in
+> `pawpal_system.py` are still stubs, so the notes describe intended behavior.
 
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Task sorting | `CareTask.weight()` | `PRIORITY_RANK[priority] * 100 - duration_minutes`. Priority is the dominant term; duration breaks ties in favour of shorter tasks, so more of the day's care fits. |
+| Filtering | `DailyPlan.build()` | A task that fits no remaining window is recorded in `DailyPlan.skipped` as a `PlanEntry` carrying a `reason`. |
+| Conflict handling | `CareTask.is_pinned()`, `DailyPlan.build()` | Tasks with an owner-requested `start_time` are placed first. A requested time that overlaps another or falls outside every `TimeSlot` is skipped with a reason. |
+| Multi-pet budgeting | `DailyPlan.build()`, `Owner.total_available_minutes()` | One plan covers the owner's whole day across every pet, so the shared time budget is spent once rather than once per pet. |
+| Recurring tasks | — | Not modelled. `CareTask` represents a single day's task; recurrence would require a schedule field and a day-of-week filter in `build()`. |
 
 ## 📸 Demo Walkthrough
 

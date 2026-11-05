@@ -3,6 +3,8 @@
 > **Stretch features only.** Only fill in the sections that apply to stretch features you attempted. If you did not attempt a stretch feature, leave its section blank or delete it. This file is not required for the core project.
 
 - brainstorming, first listing some objects and actions, then having ai fill in the gaps
+- reread class details, disagree, so made some changes, and questioned/reasoned with AI about some things
+- doing a lot of the manual labor like making skeleton, etc. with AI
 
 ---
 
