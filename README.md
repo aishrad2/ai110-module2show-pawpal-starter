@@ -46,12 +46,24 @@ pip install -r requirements.txt
 
 Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
 
+Real output from `DailyPlan.explain()` for one owner with two pets, free 07:00-08:30 and
+18:00-19:30:
+
 ```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
+Daily plan for Jordan — 2 pet(s), 7 task(s) considered, 180 min of free time.
+
+Scheduled (5):
+  07:00-07:10  Biscuit · Feeding (10 min, high) in Morning — high priority (score 290), earliest window with room
+  07:10-07:40  Mochi · Morning walk (30 min, high) in Morning — high priority (score 270), earliest window with room
+  07:45-07:55  Mochi · Meds (10 min, high) in Morning — owner asked for 07:45
+  07:55-08:10  Biscuit · Litter box (15 min, medium) in Morning — medium priority (score 185), earliest window with room
+  18:00-18:25  Mochi · Training (25 min, medium) in Evening — medium priority (score 175), earliest window with room
+
+Skipped (2):
+  Biscuit · Nail trim (20 min, low) — weekly task, not due on Tuesday
+  Biscuit · Spa afternoon (120 min, low) — no window had 120 free minutes left
+
+90 of 180 free minutes used; 90 left over.
 ```
 
 ## 🧪 Testing PawPal+
@@ -67,21 +79,39 @@ pytest --cov
 Sample test output:
 
 ```
-# Paste your pytest output here
+============================= test session starts =============================
+collected 2 items
+
+tests\test_pawpal.py ..                                                  [100%]
+
+============================== 2 passed in 0.01s ==============================
 ```
 
 ## 📐 Smarter Scheduling
 
-> The method mapping below reflects the design in `diagrams/uml_draft.mmd`. The bodies in
-> `pawpal_system.py` are still stubs, so the notes describe intended behavior.
+> The method mapping below reflects what is implemented in `pawpal_system.py` and drawn in
+> `diagrams/uml_draft.mmd`.
 
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | `CareTask.weight()` | `PRIORITY_RANK[priority] * 100 - duration_minutes`. Priority is the dominant term; duration breaks ties in favour of shorter tasks, so more of the day's care fits. |
-| Filtering | `DailyPlan.build()` | A task that fits no remaining window is recorded in `DailyPlan.skipped` as a `PlanEntry` carrying a `reason`. |
-| Conflict handling | `CareTask.is_pinned()`, `DailyPlan.build()` | Tasks with an owner-requested `start_time` are placed first. A requested time that overlaps another or falls outside every `TimeSlot` is skipped with a reason. |
-| Multi-pet budgeting | `DailyPlan.build()`, `Owner.total_available_minutes()` | One plan covers the owner's whole day across every pet, so the shared time budget is spent once rather than once per pet. |
-| Recurring tasks | — | Not modelled. `CareTask` represents a single day's task; recurrence would require a schedule field and a day-of-week filter in `build()`. |
+| Task sorting | `CareTask.weight()`, `Scheduler.ranked_tasks()` | `PRIORITY_RANK[priority] * 100 - duration_minutes`. Priority is the dominant term; duration breaks ties in favour of shorter tasks, so more of the day's care fits. An unrecognised priority is treated as low. |
+| Filtering | `Scheduler.build_plan()` | A task that fits no remaining window is recorded in `DailyPlan.skipped` as a `PlanEntry` carrying a `reason`. Completed, not-due, and zero-duration tasks are filtered out the same way. |
+| Conflict handling | `CareTask.is_pinned()`, `Scheduler.build_plan()` | Tasks with an owner-requested `start_time` are placed first, earliest request first. A requested time that collides with an earlier one or falls outside every `TimeSlot` is skipped with a reason. |
+| Multi-pet budgeting | `Owner.get_all_tasks()`, `Scheduler.build_plan()`, `Owner.total_available_minutes()` | The scheduler reads the whole workload through `Owner.get_all_tasks()` — never `pet.tasks` — so one plan covers the owner's day across every pet and the shared time budget is spent once rather than once per pet. Overlapping `TimeSlot`s are trimmed so the same minute is never offered twice. |
+| Recurring tasks | `CareTask.frequency`, `CareTask.day_of_week`, `CareTask.is_due()` | `daily` and `once` tasks are due whenever asked; a `weekly` task is due only on its `day_of_week`. `Scheduler.build_plan(weekday)` filters on this. |
+| Completion status | `CareTask.completed`, `mark_complete()`, `Scheduler.reset_day()` | Finished tasks are left out of the plan so the owner's time is not booked twice; `reset_day()` reopens them for the next day. |
+
+### How the Scheduler talks to the Owner
+
+```python
+scheduler = Scheduler(owner)
+plan = scheduler.build_plan("Tuesday")   # reads owner.get_all_tasks() internally
+print(plan.explain())
+```
+
+`Scheduler` holds an `Owner`, not a `Pet`. Every read of the work to be done goes through
+`Owner.get_all_tasks()`, which flattens every pet's list into one and stamps each task with its
+pet. Adding a second pet therefore changes the plan without changing a line of the scheduler.
 
 ## 📸 Demo Walkthrough
 

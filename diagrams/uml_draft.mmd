@@ -13,6 +13,8 @@ classDiagram
         +add_pet(Pet pet) None
         +remove_pet(Pet pet) None
         +total_available_minutes() int
+        +get_all_tasks() list~CareTask~
+        +get_pending_tasks() list~CareTask~
     }
 
     class Pet {
@@ -21,6 +23,8 @@ classDiagram
         +int age_years
         +list~CareTask~ tasks
         +add_task(CareTask task) None
+        +remove_task(CareTask task) None
+        +pending_tasks() list~CareTask~
     }
 
     class CareTask {
@@ -28,8 +32,29 @@ classDiagram
         +int duration_minutes
         +str priority
         +str start_time
+        +str frequency
+        +str day_of_week
+        +bool completed
+        +Pet pet
         +is_pinned() bool
+        +rank() int
         +weight() float
+        +is_due(str weekday) bool
+        +mark_complete() None
+        +reopen() None
+        +pet_name() str
+    }
+
+    class Scheduler {
+        +Owner owner
+        +get_all_tasks() list~CareTask~
+        +pending_tasks(str weekday) list~CareTask~
+        +ranked_tasks(str weekday) list~CareTask~
+        +tasks_for(Pet pet) list~CareTask~
+        +add_task(Pet pet, CareTask task) CareTask
+        +complete_task(CareTask task) None
+        +reset_day() None
+        +build_plan(str weekday) DailyPlan
     }
 
     class PlanEntry {
@@ -38,20 +63,28 @@ classDiagram
         +str start_time
         +str slot_label
         +str reason
+        +end_time() str
+        +describe() str
     }
 
     class DailyPlan {
         +Owner owner
         +list~PlanEntry~ entries
         +list~PlanEntry~ skipped
-        +build(Owner owner)$ DailyPlan
+        +build(Owner owner, str weekday)$ DailyPlan
+        +scheduled_minutes() int
+        +unused_minutes() int
         +explain() str
         +to_table() list~dict~
+        +skipped_table() list~dict~
     }
 
     Owner "1" --> "*" Pet : owns
     Owner "1" --> "*" TimeSlot : is free during
     Pet "1" --> "*" CareTask : has
+    CareTask "1" --> "1" Pet : belongs to
+    Scheduler "1" --> "1" Owner : reads all tasks from
+    Scheduler ..> DailyPlan : builds
     DailyPlan "1" --> "1" Owner : plans the day for
     DailyPlan "1" --> "*" PlanEntry : contains
     PlanEntry "1" --> "1" CareTask : schedules
