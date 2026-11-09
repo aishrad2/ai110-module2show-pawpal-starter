@@ -69,29 +69,63 @@ Skipped (2):
 ## 🧪 Testing PawPal+
 
 ```bash
-# Run the full test suite:
-pytest
-
-# Run with coverage:
-pytest --cov
+python -m pytest
 ```
 
-Sample test output:
+### What the tests cover
+
+32 tests in `tests/test_pawpal.py`, grouped by behaviour. Each group has its happy path
+and its edge cases.
+
+| Area | Tests | Covers |
+|------|-------|--------|
+| **Sorting** | 5 | Chronological order regardless of insertion order; unpadded `"7:00"` sorting before `"18:00"`; untimed tasks sinking to the bottom and then ordering by title; the sorter composing with a filtered slice; malformed times (`"abc"`, `"25:00"`) treated as unscheduled rather than crashing. |
+| **Filtering** | 5 | By pet name (case- and whitespace-insensitive); by completion status, asserting the two halves partition the whole list; both filters stacking; no filters returning everything; an unknown pet name returning `[]`. |
+| **Recurrence** | 6 | A completed daily task queueing tomorrow's instance on the same pet, unfinished, with its other fields intact; `timedelta` crossing a month end (2026-02-28 → 2026-03-01); a weekly task jumping 7 days and keeping its weekday; `once` queueing nothing; completing twice not breeding two copies; the queued instance staying out of *today's* plan. |
+| **Conflict detection** | 7 | Overlapping times reported, not raised; conflicts found across different pets; two tasks at the exact same minute; three mutually overlapping tasks yielding all 3 pairs; back-to-back tasks (07:00–07:30 and 07:30–07:40) **not** flagged; unpinned and completed tasks ignored; `build_plan` warning while still producing a plan. |
+| **Empty / degenerate** | 6 | A pet with no tasks; an owner with no pets; an owner with no free time; a task longer than every window; a zero-duration task; a weekly task on the wrong weekday. Each returns a plan with a stated reason rather than an exception. |
+| **Multi-pet budgeting** | 1 | Two pets with 30 min of work each in a 45-min window book 30 minutes and skip one task — proving the owner's time is spent once, not once per pet. |
+| **Base model** | 2 | `mark_complete()` flips status; `add_task()` grows the pet's list. |
+
+### Sample run
 
 ```
 ============================= test session starts =============================
-collected 13 items
+platform win32 -- Python 3.11.9, pytest-9.2.0, pluggy-1.7.0
+rootdir: C:\Users\aishw\git\Codepath\ai110-module2show-pawpal-starter
+plugins: anyio-4.16.0
+collected 32 items
 
-tests\test_pawpal.py .............                                       [100%]
+tests\test_pawpal.py ................................                    [100%]
 
-============================== 13 passed in 0.07s =============================
+============================= 32 passed in 0.09s ==============================
 ```
 
-The suite covers task completion and attachment, the recurring-task rollover (daily,
-weekly, `once`, double-completion, month-end arithmetic, and the queued instance staying
-out of today's plan), and conflict detection (same pet, different pets, back-to-back tasks
-that must *not* conflict, unpinned/completed tasks being ignored, and `build_plan` warning
-while still scheduling).
+### Confidence level: ★★★★☆ (4 / 5)
+
+**Why four and not five.** The suite passes, and it is not passing vacuously — I checked.
+Mutating the overlap test in `detect_conflicts()` from `<` to `<=` makes
+`test_back_to_back_tasks_do_not_conflict` fail with a bogus 0-minute conflict, so that
+boundary is genuinely pinned by a test rather than merely asserted in a comment. The
+`"7:00"` sorting test fails under naive string comparison, which is the regression it
+exists to catch. Every branch of the recurrence logic and every skip reason in
+`build_plan` is exercised.
+
+**Why not five.** Three honest gaps:
+
+- **Placement is tested by outcome, not exhaustively.** `FreeTime.book()` splitting a
+  window into two leftovers is covered incidentally by the multi-pet test, but there is no
+  test that deliberately books out the middle of a window and asserts both leftovers
+  remain usable.
+- **No test for overlapping `TimeSlot`s.** `_windows()` trims them so the same minute is
+  never offered twice; nothing proves it.
+- **Dates are only tested at day granularity.** There is no coverage of a task pinned near
+  midnight, and the model has no concept of a task spanning midnight at all — it would be
+  silently clipped by the window logic.
+
+**What I would test next**, in order: window-splitting leftovers, overlapping availability
+slots, and a property-style check that `scheduled_minutes()` never exceeds
+`total_available_minutes()` for randomly generated task sets.
 
 ## 📐 Smarter Scheduling
 
