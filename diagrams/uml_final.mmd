@@ -1,0 +1,155 @@
+%% PawPal+ — final class diagram, matching pawpal_system.py as built.
+%%
+%% Changes from uml_draft.mmd, all driven by Phase 3:
+%%   + FreeTime      — extracted from build_plan so the free-interval
+%%                     bookkeeping has a name instead of living as list surgery.
+%%   + TaskConflict  — the finding returned by Scheduler.detect_conflicts().
+%%                     A value object, deliberately not an exception.
+%%   + CareTask.due_date and the recurrence methods (next_due_date,
+%%     create_next_occurrence, is_recurring, normalised_frequency).
+%%   + Scheduler.sort_by_time / filter_tasks / detect_conflicts /
+%%     conflict_warnings, and _triage as a named internal.
+%%   + DailyPlan.warnings — non-fatal notices, so a conflicting day still
+%%     produces a usable plan.
+%%   ~ Scheduler.complete_task now RETURNS the next CareTask (or None), which
+%%     is the relationship that makes recurrence visible in the diagram.
+%%   ~ is_due / build_plan / pending_tasks / ranked_tasks gained an on_date
+%%     parameter so a future occurrence can be held out of today's plan.
+
+classDiagram
+    class TimeSlot {
+        +str label
+        +str start_time
+        +str end_time
+        +minutes() int
+    }
+
+    class Owner {
+        +str name
+        +list~TimeSlot~ available_timeslots
+        +list~Pet~ pets
+        +add_pet(Pet pet) None
+        +remove_pet(Pet pet) None
+        +total_available_minutes() int
+        +get_all_tasks() list~CareTask~
+        +get_pending_tasks() list~CareTask~
+    }
+
+    class Pet {
+        +str name
+        +str species
+        +int age_years
+        +list~CareTask~ tasks
+        +add_task(CareTask task) None
+        +remove_task(CareTask task) None
+        +pending_tasks() list~CareTask~
+    }
+
+    class CareTask {
+        +str title
+        +int duration_minutes
+        +str priority
+        +str start_time
+        +str frequency
+        +str day_of_week
+        +bool completed
+        +date due_date
+        +Pet pet
+        +is_pinned() bool
+        +rank() int
+        +weight() float
+        +normalised_frequency() str
+        +is_recurring() bool
+        +is_due(str weekday, date on_date) bool
+        +next_due_date(date from_date) date
+        +create_next_occurrence(date from_date) CareTask
+        +mark_complete() None
+        +reopen() None
+        +pet_name() str
+    }
+
+    class TaskConflict {
+        +CareTask first
+        +CareTask second
+        +int overlap_minutes
+        +same_pet() bool
+        +message() str
+    }
+
+    class FreeTime {
+        -list _free
+        +label_at(int index) str
+        +start_at(int index) int
+        +fit_at(int start, int duration) int
+        +first_fit(int duration) int
+        +book(int index, int start, int duration) None
+    }
+
+    class Scheduler {
+        +Owner owner
+        +get_all_tasks() list~CareTask~
+        +pending_tasks(str weekday, date on_date) list~CareTask~
+        +ranked_tasks(str weekday, date on_date) list~CareTask~
+        +tasks_for(Pet pet) list~CareTask~
+        +sort_by_time(list~CareTask~ tasks) list~CareTask~
+        +filter_tasks(list~CareTask~ tasks, str pet_name, bool completed) list~CareTask~
+        +add_task(Pet pet, CareTask task) CareTask
+        +complete_task(CareTask task, date on_date) CareTask
+        +reset_day() None
+        +detect_conflicts(str weekday, date on_date) list~TaskConflict~
+        +conflict_warnings(str weekday, date on_date) list~str~
+        +build_plan(str weekday, date on_date) DailyPlan
+        -_triage(DailyPlan plan, str weekday, date on_date) tuple
+        -_windows() list
+    }
+
+    class PlanEntry {
+        +Pet pet
+        +CareTask task
+        +str start_time
+        +str slot_label
+        +str reason
+        +end_time() str
+        +describe() str
+    }
+
+    class DailyPlan {
+        +Owner owner
+        +list~PlanEntry~ entries
+        +list~PlanEntry~ skipped
+        +list~str~ warnings
+        +build(Owner owner, str weekday, date on_date)$ DailyPlan
+        +scheduled_minutes() int
+        +unused_minutes() int
+        +explain() str
+        +to_table() list~dict~
+        +skipped_table() list~dict~
+    }
+
+    %% Ownership: the model's spine, Owner at the root.
+    Owner "1" --> "*" Pet : owns
+    Owner "1" --> "*" TimeSlot : is free during
+    Pet "1" --> "*" CareTask : has
+    CareTask "1" --> "1" Pet : belongs to
+
+    %% The scheduler reads the whole workload through the Owner, never
+    %% pet.tasks — that is what keeps one shared time budget.
+    Scheduler "1" --> "1" Owner : reads all tasks from
+    Scheduler ..> DailyPlan : builds
+    Scheduler ..> TaskConflict : detects
+    Scheduler ..> FreeTime : books time out of
+    FreeTime ..> TimeSlot : derived from
+
+    %% Recurrence: completing a task produces its successor.
+    Scheduler ..> CareTask : completes and re-queues
+    CareTask ..> CareTask : create_next_occurrence()
+
+    %% Conflicts reference the two tasks they are about; they are reported,
+    %% never raised.
+    TaskConflict "1" --> "2" CareTask : compares
+
+    %% Results. PlanEntry keeps scheduling output off the reusable CareTask.
+    DailyPlan "1" --> "1" Owner : plans the day for
+    DailyPlan "1" --> "*" PlanEntry : contains
+    PlanEntry "1" --> "1" CareTask : schedules
+    PlanEntry "1" --> "1" Pet : is for

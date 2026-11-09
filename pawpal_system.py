@@ -14,7 +14,8 @@ Four classes carry the system:
   same minutes get spent once per pet.
 
 ``TimeSlot``, ``PlanEntry`` and ``DailyPlan`` are the supporting value types.
-Design diagram: ``diagrams/uml_draft.mmd``.
+Design diagram: ``diagrams/uml_final.mmd`` (``uml_draft.mmd`` is the Phase 1
+sketch, kept for comparison).
 """
 
 from __future__ import annotations

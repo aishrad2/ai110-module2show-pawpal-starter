@@ -145,43 +145,99 @@ if st.button("Add task"):
         )
         st.session_state.plan = None
 
+today = date.today()
+weekday = today.strftime("%A")
+
 all_tasks = owner.get_all_tasks()
-if all_tasks:
-    st.write("Current tasks:")
-    st.table(
-        [
-            {
-                "Pet": task.pet_name(),
-                "Task": task.title,
-                "Minutes": task.duration_minutes,
-                "Priority": task.priority,
-                "Frequency": task.frequency,
-                "Requested": task.start_time or "—",
-                "Due": f"{task.due_date:%a %d %b}" if task.due_date else "today",
-                "Done": "✓" if task.completed else "",
-            }
-            for task in all_tasks
-        ]
-    )
-else:
+if not all_tasks:
     st.info("No tasks yet. Add one above.")
+else:
+    # --- Filter controls, wired straight to Scheduler.filter_tasks ---------
+    st.markdown("#### Current tasks")
+
+    fcol1, fcol2 = st.columns(2)
+    with fcol1:
+        pet_choice = st.selectbox(
+            "Show pet",
+            ["All pets"] + [pet.name for pet in owner.pets],
+            help="Filters with Scheduler.filter_tasks(pet_name=...).",
+        )
+    with fcol2:
+        status_choice = st.radio(
+            "Show status",
+            ["All", "Still to do", "Done"],
+            horizontal=True,
+            help="Filters with Scheduler.filter_tasks(completed=...).",
+        )
+
+    # None means "don't care" on both filters, so the widgets map directly onto
+    # the scheduler's own API rather than being re-implemented here.
+    completed_filter = {"All": None, "Still to do": False, "Done": True}[status_choice]
+    visible = scheduler.filter_tasks(
+        pet_name=None if pet_choice == "All pets" else pet_choice,
+        completed=completed_filter,
+    )
+    # Sorted chronologically — the sorter composes with the filtered slice.
+    visible = scheduler.sort_by_time(visible)
+
+    if not visible:
+        st.info("No tasks match that filter.")
+    else:
+        st.caption(
+            f"Showing {len(visible)} of {len(all_tasks)} task(s), "
+            "sorted by requested time (untimed tasks last)."
+        )
+        st.table(
+            [
+                {
+                    "Requested": task.start_time or "—",
+                    "Pet": task.pet_name(),
+                    "Task": task.title,
+                    "Minutes": task.duration_minutes,
+                    "Priority": task.priority,
+                    "Frequency": task.frequency,
+                    "Due": f"{task.due_date:%a %d %b}" if task.due_date else "today",
+                    "Done": "✓" if task.completed else "",
+                }
+                for task in visible
+            ]
+        )
 
 st.divider()
 
 st.subheader("Build Schedule")
 
-today = date.today()
-weekday = today.strftime("%A")
 st.caption(
     f"Planning for {weekday}, {today:%d %b}. Weekly tasks are filtered against "
     "the weekday; tasks queued for a future date sit out until their day."
 )
 
-# Overlapping requested times are worth flagging before the plan is built, not
-# only after — the owner may want to retype one of them.
-live_conflicts = scheduler.conflict_warnings(weekday, today)
-for warning in live_conflicts:
-    st.warning(warning)
+# --- Conflict warnings -----------------------------------------------------
+# Shown before the plan is generated, not only after: the owner can still fix a
+# time, and the fix is the task list directly above. Each warning names both
+# tasks and the consequence, because "two intervals overlap" is not actionable
+# but "Brushing will not be scheduled" is. Never an exception — an overlap is
+# something the owner may well have meant.
+conflicts = scheduler.detect_conflicts(weekday, today)
+if all_tasks:
+    if conflicts:
+        st.markdown("##### ⚠️ Scheduling conflicts")
+        for conflict in conflicts:
+            scope = (
+                f"Both tasks are for {conflict.first.pet_name()}"
+                if conflict.same_pet()
+                else f"{conflict.first.pet_name()} and {conflict.second.pet_name()} "
+                "need you at the same time"
+            )
+            st.warning(
+                f"**{conflict.first.title}** and **{conflict.second.title}** "
+                f"overlap by {conflict.overlap_minutes} minutes.\n\n"
+                f"{scope}. **{conflict.second.title}** will be left out of "
+                f"today's plan unless you move one of them.",
+                icon="⚠️",
+            )
+    else:
+        st.success("No scheduling conflicts — every requested time is clear.", icon="✅")
 
 col6, col7 = st.columns(2)
 with col6:
@@ -204,12 +260,24 @@ else:
 
     rows = plan.to_table()
     if rows:
+        if not plan.skipped:
+            st.success(
+                f"Everything fits — {len(rows)} task(s) scheduled across "
+                f"{len(owner.pets)} pet(s).",
+                icon="✅",
+            )
+        st.markdown("#### Today's schedule")
+        st.caption("In clock order. 'Why' is the scheduler's own reason for the slot.")
         st.table(rows)
     else:
-        st.warning("Nothing fit in the owner's free windows.")
+        st.warning(
+            "Nothing fit in the owner's free windows. Check the reasons below.",
+            icon="⚠️",
+        )
 
     if plan.skipped:
         st.markdown("#### Not scheduled")
+        st.caption("Every task left out, with the reason it was left out.")
         st.table(plan.skipped_table())
 
     with st.expander("Why does the plan look like this?"):
