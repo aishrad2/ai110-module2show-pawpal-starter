@@ -100,8 +100,51 @@ I also added `Owner.remove_pet()` to pair with `add_pet()`, and
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+**The tradeoff: conflict detection *reports* overlaps instead of resolving them.**
+
+`Scheduler.detect_conflicts()` finds every pair of outstanding pinned tasks whose
+requested times overlap and returns a `TaskConflict` for each. What it does *not* do is
+act on them. It does not raise, it does not refuse to build the plan, and it does not try
+to shuffle either task to a time that would work. `build_plan()` hangs the warnings off
+`DailyPlan.warnings`, then proceeds exactly as it would have anyway: the earlier-requested
+task gets its slot, and the loser lands in `skipped` with "requested 07:45 collides with
+an earlier task". The owner sees both the warning and a usable plan.
+
+Two smaller decisions sit inside that one:
+
+- **True overlap, not exact-time equality.** The obvious cheap version is to flag two
+  tasks only when their `start_time` strings match. That would catch Mochi's meds and
+  Biscuit's brushing (both 07:45) and completely miss Mochi's 18:20 puzzle toy sitting
+  inside his own 18:15–18:40 training session — the more common and more annoying case.
+  Comparing intervals (`start_a < end_b and start_b < end_a`) costs one extra line and
+  catches both, so duration is part of the test.
+- **Pinned tasks only, compared pairwise.** Tasks with no requested time are excluded:
+  they have no time to clash over, and the scheduler is free to drop them in a gap. The
+  comparison is a plain nested loop over the pinned tasks — O(n²).
+
+**Why it is reasonable here.**
+
+An overlap is not necessarily a mistake, and the program is in no position to tell. If the
+owner has asked for meds at 07:45 and brushing at 07:45, the information the program holds
+is strictly less than the information the owner holds: maybe one of them is quick enough
+to overlap in practice, maybe the brushing time was a typo, maybe the meds genuinely must
+be 07:45 and the brushing can slide. Auto-resolving means picking one of those stories and
+silently acting on it, which produces a plan the owner did not ask for and cannot see the
+reasoning behind. Raising is worse still — one typo in one field and the whole day fails
+to plan, which is the opposite of what a planning assistant is for.
+
+The O(n²) scan is the same kind of call. A realistic day is five to fifteen pinned tasks,
+so the quadratic version runs in microseconds and the sorted-sweep alternative would buy
+nothing measurable while costing real clarity. Picking the simple, obviously-correct
+algorithm is the right trade at this size; it would be the wrong one at ten thousand
+tasks, and that is the condition under which I would revisit it.
+
+**What it costs.** The owner has to do the fixing. The scheduler will cheerfully warn
+about the same conflict every single day until someone edits one of the two times, and a
+plan with four warnings is only as useful as the owner's willingness to read them. A
+future iteration could offer a suggested resolution — "move brushing to 08:00, the next
+free 15 minutes" — but offering it is still different from doing it, and the *offering*
+is the part that keeps the owner in charge.
 
 ---
 
@@ -111,6 +154,8 @@ I also added `Owner.remove_pet()` to pair with `add_pet()`, and
 
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
 - What kinds of prompts or questions were most helpful?
+- used it for design brainstorming, code implementation, and debugging, and documentation with my collaboration and verification
+- asking for refreshers, asking how an exisiting piece of code works/mine I wrote previously, going back on forth on brainstorming, questioning AI's decisions, having it verify mine without just validating
 
 **b. Judgment and verification**
 
